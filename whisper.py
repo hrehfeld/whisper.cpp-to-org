@@ -17,6 +17,7 @@
 import sys
 import subprocess
 from pathlib import Path
+import shlex
 
 sample_rate = 16000
 
@@ -70,14 +71,16 @@ def transcribe(whisper_command, input_file):
         + ffmpeg_options
         + ["-"]
     )
-    # print(" ".join(map(str, cmd)))
+    # print(" ".join([shlex.quote(str(x)) for x in cmd]))
     # just text subprocess pipes
     ffmpeg = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
     )
+    cmd = whisper_command + ["--output-txt", "-f", "-"]
+    # print(" ".join([shlex.quote(str(x)) for x in cmd]))
     whisper = subprocess.Popen(
-        whisper_command + ["--output-txt", "-f", "-"],
+        cmd,
         stdin=ffmpeg.stdout,
         stdout=subprocess.PIPE,
         # for some reason theres a lot of chatter on stderr
