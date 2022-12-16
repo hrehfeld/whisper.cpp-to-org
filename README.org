@@ -1,0 +1,9 @@
+* Usage
+:PROPERTIES:
+:ID:       914d7bec-342d-4934-9b8f-78fd526cc988
+:END:
+First, install whisper.cpp and add a model.
+
+Then, configure this daemon by ~cp config.json.sample config.json~ and modifying the settings there.
+
+Last, simply run ~daemon~, it will try to transcribe all files in the given directory.
