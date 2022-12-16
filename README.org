@@ -2,7 +2,7 @@
 :PROPERTIES:
 :ID:       e1dfb3b3-eb28-40aa-865a-bd8dc70d2411
 :END:
-1. Scan ~watch_dir~ for audio files
+1. Scan ~watch_dir~ for audio files every ~sleep_seconds~
 2. Transcribe them using ~whisper_command~
 3. Move processed files into ~done_dir~
 4. Append notes to ~output_file~
