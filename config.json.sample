@@ -1,0 +1,7 @@
+{
+  "sleep_seconds": 10,
+  "whisper_command": ["whisper.cpp-medium", "-p", 6, "-t", 1],
+  "watch_dir": "~/tasks/recordings/input",
+  "done_dir": "~/tasks/recordings/done",
+  "output_file": "~/tasks/recordings.org"
+}

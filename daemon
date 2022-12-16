@@ -1,0 +1,157 @@
+#!/bin/python
+# Copyright 2022, Hauke Rehfeld
+#
+# This file is part of whisper.cpp-to-orgmode.
+#
+# whisper.cpp-to-orgmode is free software: you can redistribute it and/or modify it under the terms
+# of the GNU Affero General Public License as published by the Free Software Foundation, either
+# version 3 of the License, or (at your option) any later version.
+#
+# whisper.cpp-to-orgmode is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+# PURPOSE. See the GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License along with
+# whisper.cpp-to-orgmode. If not, see <https://www.gnu.org/licenses/>.
+#
+from pathlib import Path
+from os.path import expanduser
+from uuid import uuid4
+from time import sleep
+
+from whisper import transcribe
+from org import atomic_note, org_ext
+import conventions
+
+import json
+import sys
+import shlex
+
+
+def log_verbose(*args):
+    print(*args)
+
+
+def log(*args):
+    pass
+
+
+config_filepath = Path("config.json")
+
+audio_suffixes = ["." + ext for ext in "wav ogg mp3 mp4 flac opus".split()]
+
+uuid = str(uuid4())
+
+
+def lockfilepath(filepath):
+    return filepath.with_suffix(filepath.suffix + ".lock")
+
+
+def lock(filepath):
+    lockfile = lockfilepath(filepath)
+    if lockfile.exists():
+        return False
+    lockfile.write_text(uuid)
+    # some other thread stole the lock
+    actual_content = lockfile.read_text()
+    if actual_content != uuid:
+        return False
+    return lockfile
+
+
+def unlock(filepath):
+    lockfile = lockfilepath(filepath)
+    # some other thread stole the lock
+    actual_content = lockfile.read_text()
+    if actual_content != uuid:
+        return False
+    try:
+        lockfile.unlink()
+    except FileNotFoundError:
+        # weird, but ultimately not fatal
+        pass
+    return lockfile
+
+
+def load_config(config_filepath):
+    if not config_filepath.exists():
+        sys.stderr.write(f"Please provide a config file at {config_filepath}\n")
+        sys.exit(1)
+    with config_filepath.open("r") as f:
+        config_data = json.load(f)
+
+    def config(key):
+        assert (
+            key in config_data
+        ), f"Please provide a {key} in the config file at {config_filepath}\n"
+        return config_data[key]
+
+    def make_path(s):
+        return Path(s).expanduser()
+
+    def make_command(s):
+        s = shlex.split(s) if isinstance(s, str) else s
+        assert isinstance(s, list), s
+        return [str(x) for x in s]
+
+    sleep_seconds = float(config("sleep_seconds"))
+    whisper_command = make_command(config("whisper_command"))
+    watch_dir = make_path(config("watch_dir"))
+    done_dir = make_path(config("done_dir"))
+    output_file = make_path(config("output_file"))
+    return sleep_seconds, whisper_command, watch_dir, done_dir, output_file
+
+
+def main():
+    sleep_seconds, whisper_command, watch_dir, done_dir, output_file = load_config(
+        config_filepath
+    )
+
+    while True:
+        for input_file in watch_dir.iterdir():
+            if input_file.suffix not in audio_suffixes:
+                log(f"Skipping '{input_file}' because it's not an audio file")
+                continue
+            lock_acquired = lock(input_file)
+            if not lock_acquired:
+                log(
+                    f"Skipping {input_file} because lockfile '{lockfilepath(input_file)}' already exists"
+                )
+
+                continue
+            log(f"Transcribing {input_file}...")
+            try:
+                text = transcribe(whisper_command, input_file)
+
+                note = atomic_note(
+                    uuid4(),
+                    text,
+                    conventions.guess_date_from_filename(input_file),
+                )
+
+                output_file.parent.mkdir(exist_ok=True, parents=True)
+
+                lock_acquired = lock(output_file)
+                while not lock_acquired:
+                    sleep(1)
+                    lock_acquired = lock(output_file)
+                try:
+                    with output_file.open("a") as f:
+                        f.write(note)
+                        f.write("\n")
+                finally:
+                    unlock(output_file)
+
+                done_dir.mkdir(exist_ok=True, parents=True)
+                input_file.rename(done_dir / input_file.name)
+            finally:
+                unlock(input_file)
+        log(f"Sleeping for {sleep_seconds} seconds...")
+        sleep(sleep_seconds)
+
+
+if __name__ == "__main__":
+    assert len(sys.argv) <= 2, "Too many arguments"
+    if len(sys.argv) > 1 and sys.argv[1] == "--verbose":
+        log = log_verbose
+    main()
