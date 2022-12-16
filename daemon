@@ -26,7 +26,8 @@ import conventions
 import json
 import sys
 import shlex
-
+import os
+import subprocess
 
 def log_verbose(*args):
     print(*args)
@@ -102,50 +103,75 @@ def load_config(config_filepath):
     return sleep_seconds, whisper_command, watch_dir, done_dir, output_file
 
 
+def audio_file_length(filepath):
+    cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filepath]
+    #print(" ".join([shlex.quote(str(x)) for x in cmd]))
+    lines = subprocess.check_output(cmd, text=True).splitlines()
+    assert len(lines) == 1, lines
+    v = lines[0]
+    if v == 'N/A':
+        return 9999;
+    return float(v)
+
+
 def main():
     sleep_seconds, whisper_command, watch_dir, done_dir, output_file = load_config(
         config_filepath
     )
 
+    # sleep and watch
     while True:
-        for input_file in watch_dir.iterdir():
-            if input_file.suffix not in audio_suffixes:
-                log(f"Skipping '{input_file}' because it's not an audio file")
-                continue
-            lock_acquired = lock(input_file)
-            if not lock_acquired:
-                log(
-                    f"Skipping {input_file} because lockfile '{lockfilepath(input_file)}' already exists"
-                )
+        # sort by filesize/length everytime to process as fast as possible
+        while True:
+            # if input_file.suffix not in audio_suffixes:
+            #     log(f"Skipping '{input_file}' because it's not an audio file")
+            #     continue
+            files = [filepath for filepath in watch_dir.iterdir() if filepath.suffix in audio_suffixes]
+            if not files:
+                break
+            files.sort(key=lambda p: os.path.getsize(p))
+            files.sort(key=audio_file_length)
+            for input_file in files:
+                lock_acquired = lock(input_file)
+                if not lock_acquired:
+                    log(
+                        f"Skipping {input_file} because lockfile '{lockfilepath(input_file)}' already exists"
+                    )
 
-                continue
-            log(f"Transcribing {input_file}...")
-            try:
-                text = transcribe(whisper_command, input_file)
-
-                note = atomic_note(
-                    uuid4(),
-                    text,
-                    conventions.guess_date_from_filename(input_file),
-                )
-
-                output_file.parent.mkdir(exist_ok=True, parents=True)
-
-                lock_acquired = lock(output_file)
-                while not lock_acquired:
-                    sleep(1)
-                    lock_acquired = lock(output_file)
+                    continue
+                log(f"Transcribing {input_file}...")
                 try:
-                    with output_file.open("a") as f:
-                        f.write(note)
-                        f.write("\n")
-                finally:
-                    unlock(output_file)
+                    text = transcribe(whisper_command, input_file)
+                    log(f"Transcribed {input_file} to '{text}'")
 
-                done_dir.mkdir(exist_ok=True, parents=True)
-                input_file.rename(done_dir / input_file.name)
-            finally:
-                unlock(input_file)
+                    if text is None:
+                        log(f"{input_file} didn't contain any text, skipping.")
+                    else:
+                        note = atomic_note(
+                            uuid4(),
+                            text,
+                            conventions.guess_date_from_filename(input_file),
+                        )
+
+                        output_file.parent.mkdir(exist_ok=True, parents=True)
+
+                        lock_acquired = lock(output_file)
+                        while not lock_acquired:
+                            sleep(1)
+                            lock_acquired = lock(output_file)
+                        try:
+                            with output_file.open("a") as f:
+                                f.write(note)
+                                f.write("\n")
+                        finally:
+                            unlock(output_file)
+
+                    done_dir.mkdir(exist_ok=True, parents=True)
+                    input_file.rename(done_dir / input_file.name)
+                finally:
+                    unlock(input_file)
+                # sort list of files again
+                break
         log(f"Sleeping for {sleep_seconds} seconds...")
         sleep(sleep_seconds)
 
