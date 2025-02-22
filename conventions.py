@@ -17,5 +17,8 @@ import datetime
 
 
 def guess_date_from_filename(filename):
-    date = datetime.datetime.strptime(filename.stem, "%Y-%m-%d %H.%M.%S")
+    try:
+        date = datetime.datetime.strptime(filename.stem, "%Y-%m-%d %H.%M.%S")
+    except ValueError as e:
+        return None
     return date
