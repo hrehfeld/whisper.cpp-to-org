@@ -23,20 +23,26 @@ heading_max_num_words = 20
 heading_num_words = 14
 
 
-def simple_headline(uuid, heading, content_str, created_date):
+def simple_headline(uuid, heading, content_str, created_date, properties=None):
+    properties = properties or {}
+
     created_date = created_date.strftime(org_date_format)
+
+    properties['CREATED'] = f'[{created_date}]'
+    properties['ID'] = uuid
+
+    properties_str = '\n'.join([f':{key.upper()}: {value}' for key, value in properties.items()])
 
     res = f"""* {heading}
 :PROPERTIES:
-:CREATED: [{created_date}]
-:ID: {uuid}
+{properties_str}
 :END:
 {content_str}
 """
     return res
 
 
-def atomic_note(uuid, text, created_date):
+def atomic_note(uuid, text, created_date, properties=None):
     text_words = text.split()
     if len(text_words) > heading_max_num_words:
         heading = " ".join(text_words[:heading_num_words])
@@ -44,5 +50,5 @@ def atomic_note(uuid, text, created_date):
         heading = text
         text = ''
 
-    note = simple_headline(uuid, heading, text, created_date)
+    note = simple_headline(uuid, heading, text, created_date, properties)
     return note
