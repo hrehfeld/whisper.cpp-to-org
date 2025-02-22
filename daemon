@@ -173,7 +173,7 @@ def main():
                     unlock(input_file)
                 # sort list of files again
                 break
-        log(f"Sleeping for {sleep_seconds} seconds...")
+        #log(f"Sleeping for {sleep_seconds} seconds...")
         sleep(sleep_seconds)
 
 
