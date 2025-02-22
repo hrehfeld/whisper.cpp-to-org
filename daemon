@@ -18,6 +18,7 @@ from pathlib import Path
 from os.path import expanduser
 from uuid import uuid4
 from time import sleep
+from datetime import datetime
 
 from whisper import transcribe
 from org import atomic_note, org_ext
