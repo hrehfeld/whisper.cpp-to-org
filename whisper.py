@@ -62,7 +62,7 @@ def transcribe(whisper_command, input_file):
     # print("-----", temp_filepath)
     # out_filepath = temp_filepath.with_suffix(temp_filepath.suffix + ".txt")
 
-    cmd = (
+    ffmpeg_cmd = (
         ffmpeg_command
         + [
             "-i",
@@ -71,14 +71,13 @@ def transcribe(whisper_command, input_file):
         + ffmpeg_options
         + ["-"]
     )
-    # print(" ".join([shlex.quote(str(x)) for x in cmd]))
     # just text subprocess pipes
     ffmpeg = subprocess.Popen(
-        cmd,
+        ffmpeg_cmd,
         stdout=subprocess.PIPE,
     )
     cmd = whisper_command + ["--output-txt", "-f", "-"]
-    # print(" ".join([shlex.quote(str(x)) for x in cmd]))
+    print(" ".join([shlex.quote(str(x)) for x in ffmpeg_cmd]), '|', " ".join([shlex.quote(str(x)) for x in cmd]))
     whisper = subprocess.Popen(
         cmd,
         stdin=ffmpeg.stdout,
