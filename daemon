@@ -115,6 +115,41 @@ def audio_file_length(filepath):
     return float(v)
 
 
+def extract_creation_date(file_path):
+    """
+    Extracts the creation date from a media file's metadata using FFmpeg.
+
+    Args:
+    - file_path (str): The path to the media file.
+
+    Returns:
+    - datetime.datetime: The creation date, or None if not found.
+    """
+    # Command to get metadata using FFmpeg
+    cmd = ['ffmpeg', '-i', file_path, '-f', 'ffmetadata', '-']
+
+    try:
+        # Execute FFmpeg command and capture output
+        result = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
+
+        # FFmpeg writes metadata to stderr
+        output = result.stderr
+
+        # Look for a line containing creation date in the FFmpeg output
+        for line in output.split('\n'):
+            if 'creation_time' in line:
+                # Extract the date string
+                date_str = line.split(':', 1)[1].strip()
+                # Convert to datetime object
+                return datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+    # Return None if date not found or any error occurs
+    return None
+
+
+
 def main():
     sleep_seconds, whisper_command, watch_dir, done_dir, output_file = load_config(
         config_filepath
@@ -140,7 +175,14 @@ def main():
                     )
 
                     continue
-                log(f"Transcribing {input_file}...")
+                file_date = None
+                file_date = file_date or extract_creation_date(input_file)
+                file_date = file_date or conventions.guess_date_from_filename(input_file)
+                file_date = file_date or datetime.fromtimestamp(input_file.stat().st_mtime)
+
+                log(f"Transcribing {input_file} (created {file_date})...")
+                done_filepath = done_dir / input_file.name
+
                 try:
                     text = transcribe(whisper_command, input_file)
                     log(f"Transcribed {input_file} to '{text}'")
@@ -151,7 +193,8 @@ def main():
                         note = atomic_note(
                             uuid4(),
                             text,
-                            conventions.guess_date_from_filename(input_file),
+                            file_date,
+                            { 'input_file': shlex.quote(str(done_filepath)) }
                         )
 
                         output_file.parent.mkdir(exist_ok=True, parents=True)
@@ -168,7 +211,7 @@ def main():
                             unlock(output_file)
 
                     done_dir.mkdir(exist_ok=True, parents=True)
-                    input_file.rename(done_dir / input_file.name)
+                    input_file.rename(done_filepath)
                 finally:
                     unlock(input_file)
                 # sort list of files again
