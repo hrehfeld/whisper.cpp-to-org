@@ -39,7 +39,7 @@ def log(*args):
 
 config_filepath = Path("config.json")
 
-audio_suffixes = ["." + ext for ext in "wav ogg mp3 mp4 flac opus".split()]
+audio_suffixes = ["." + ext for ext in "wav ogg mp3 mp4 flac opus aac".split()]
 
 uuid = str(uuid4())
 
